@@ -86,6 +86,13 @@ func (s *Server) uploadVideoHandler(c *gin.Context) {
 		Int64("size", video.Size).
 		Msg("video uploaded successfully")
 
+	// Trigger webhook for video upload event
+	go s.webhookMgr.NotifyWebhooks("video.uploaded", gin.H{
+		"video":   video,
+		"event":   "video.uploaded",
+		"timestamp": time.Now().Unix(),
+	})
+
 	c.JSON(http.StatusCreated, gin.H{
 		"success": true,
 		"video":   video,

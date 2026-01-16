@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -90,6 +91,14 @@ func (s *Server) deleteVideoHandler(c *gin.Context) {
 		Str("video_id", videoID).
 		Str("filename", video.Name).
 		Msg("video deleted successfully")
+
+	// Trigger webhook for video deletion event
+	go s.webhookMgr.NotifyWebhooks("video.deleted", gin.H{
+		"video_id":  videoID,
+		"filename":  video.Name,
+		"event":     "video.deleted",
+		"timestamp": time.Now().Unix(),
+	})
 
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,

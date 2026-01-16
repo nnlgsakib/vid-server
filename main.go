@@ -159,10 +159,11 @@ func (db *InMemoryDB) GetAllVideos() []*Video {
 
 // Server represents the main server
 type Server struct {
-	config *Config
-	db     *InMemoryDB
-	router *gin.Engine
-	logger zerolog.Logger
+	config       *Config
+	db           *InMemoryDB
+	webhookMgr   *WebhookManager
+	router       *gin.Engine
+	logger       zerolog.Logger
 }
 
 // NewServer creates a new server instance
@@ -176,9 +177,10 @@ func NewServer(config *Config) *Server {
 	}
 
 	server := &Server{
-		config: config,
-		db:     NewInMemoryDB(),
-		logger: logger.With().Str("component", "server").Logger(),
+		config:     config,
+		db:         NewInMemoryDB(),
+		webhookMgr: NewWebhookManager(),
+		logger:     logger.With().Str("component", "server").Logger(),
 	}
 
 	// Setup routes
@@ -191,14 +193,14 @@ func NewServer(config *Config) *Server {
 func (s *Server) setupRoutes() {
 	gin.SetMode(gin.ReleaseMode)
 	s.router = gin.New()
-	
+
 	// Middleware
 	s.router.Use(gin.Recovery())
 	s.router.Use(s.loggingMiddleware())
-	
+
 	// Health check
 	s.router.GET("/health", s.healthHandler)
-	
+
 	// Video endpoints
 	videoGroup := s.router.Group("/api/videos")
 	{
@@ -207,6 +209,14 @@ func (s *Server) setupRoutes() {
 		videoGroup.DELETE("/:id", s.deleteVideoHandler)
 		videoGroup.GET("/latest", s.getLatestVideoHandler)
 		videoGroup.GET("", s.getAllVideosHandler)
+	}
+
+	// Webhook endpoints
+	webhookGroup := s.router.Group("/api/webhooks")
+	{
+		webhookGroup.POST("", s.addWebhookHandler)
+		webhookGroup.GET("", s.getWebhooksHandler)
+		webhookGroup.DELETE("", s.removeWebhookHandler)
 	}
 }
 

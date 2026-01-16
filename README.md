@@ -40,6 +40,45 @@ GET /api/videos?page=1&limit=20
 DELETE /api/videos/{id}
 ```
 
+### Webhook Management
+
+#### Add Webhook
+Subscribe to events by adding a webhook URL:
+```
+POST /api/webhooks
+Content-Type: application/json
+Body: {
+  "event": "video.uploaded",
+  "url": "https://your-webhook-url.com/callback"
+}
+```
+
+Supported events:
+- `video.uploaded` - Triggered when a video is uploaded
+- `video.deleted` - Triggered when a video is deleted
+
+#### Get Webhooks
+Retrieve all registered webhooks:
+```
+GET /api/webhooks
+```
+
+Get webhooks for a specific event:
+```
+GET /api/webhooks?event=video.uploaded
+```
+
+#### Remove Webhook
+Remove a webhook subscription:
+```
+DELETE /api/webhooks
+Content-Type: application/json
+Body: {
+  "event": "video.uploaded",
+  "url": "https://your-webhook-url.com/callback"
+}
+```
+
 ### Health Check
 ```
 GET /health
