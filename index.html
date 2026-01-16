@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Webhook Manager</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            padding: 40px;
+            max-width: 500px;
+            width: 100%;
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 8px;
+            font-size: 28px;
+        }
+
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #555;
+            font-weight: 500;
+            font-size: 14px;
+        }
+
+        input, select {
+            width: 100%;
+            padding: 12px 16px;
+            border: 2px solid #e1e1e1;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+
+        input:focus, select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        button {
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .message {
+            margin-top: 20px;
+            padding: 14px;
+            border-radius: 8px;
+            font-size: 14px;
+            display: none;
+        }
+
+        .message.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .message.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .webhooks-section {
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #e1e1e1;
+        }
+
+        .webhooks-section h2 {
+            color: #333;
+            margin-bottom: 15px;
+            font-size: 18px;
+        }
+
+        .webhook-item {
+            background: #f8f9fa;
+            padding: 12px;
+            border-radius: 6px;
+            margin-bottom: 10px;
+            font-size: 13px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .webhook-info {
+            flex: 1;
+        }
+
+        .webhook-event {
+            font-weight: 600;
+            color: #667eea;
+            margin-bottom: 4px;
+        }
+
+        .webhook-url {
+            color: #666;
+            word-break: break-all;
+        }
+
+        .delete-btn {
+            background: #dc3545;
+            width: auto;
+            padding: 6px 12px;
+            font-size: 12px;
+            margin-left: 10px;
+        }
+
+        .delete-btn:hover {
+            background: #c82333;
+            box-shadow: 0 4px 10px rgba(220, 53, 69, 0.4);
+        }
+
+        .refresh-btn {
+            background: #28a745;
+            margin-top: 10px;
+            padding: 10px;
+            font-size: 14px;
+        }
+
+        .refresh-btn:hover {
+            background: #218838;
+            box-shadow: 0 4px 10px rgba(40, 167, 69, 0.4);
+        }
+
+        .no-webhooks {
+            color: #999;
+            font-style: italic;
+            text-align: center;
+            padding: 20px;
+        }
+
+        .loading {
+            text-align: center;
+            color: #666;
+            padding: 20px;
+        }
+
+        .test-section {
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #e1e1e1;
+        }
+
+        .test-section h2 {
+            color: #333;
+            margin-bottom: 15px;
+            font-size: 18px;
+        }
+
+        .test-btn {
+            background: #17a2b8;
+            margin-top: 10px;
+            padding: 10px;
+            font-size: 14px;
+        }
+
+        .test-btn:hover {
+            background: #138496;
+            box-shadow: 0 4px 10px rgba(23, 162, 184, 0.4);
+        }
+
+        .test-info {
+            margin-top: 10px;
+            padding: 10px;
+            background: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeeba;
+            border-radius: 6px;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Webhook Manager</h1>
+        <p class="subtitle">Add webhook URLs to receive event notifications</p>
+
+        <form id="webhookForm">
+            <div class="form-group">
+                <label for="event">Event Type</label>
+                <select id="event" required>
+                    <option value="">Select an event</option>
+                    <option value="video.uploaded">video.uploaded</option>
+                    <option value="video.deleted">video.deleted</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="url">Webhook URL</label>
+                <input type="url" id="url" placeholder="https://your-webhook-url.com/callback" required>
+            </div>
+
+            <button type="submit" id="submitBtn">Add Webhook</button>
+        </form>
+
+        <div id="message" class="message"></div>
+
+        <div class="webhooks-section">
+            <h2>Registered Webhooks</h2>
+            <div id="webhooksList"></div>
+            <button id="refreshBtn" class="refresh-btn" style="display: none;">Refresh</button>
+        </div>
+
+        <div class="test-section">
+            <h2>Test Webhook</h2>
+            <p class="subtitle">Send a test webhook to any URL without uploading a video</p>
+            <div class="form-group">
+                <label for="testUrl">Webhook URL</label>
+                <input type="url" id="testUrl" placeholder="https://your-webhook-url.com/callback" required>
+            </div>
+
+            <div class="form-group">
+                <label for="testEvent">Event Type</label>
+                <select id="testEvent">
+                    <option value="video.uploaded" selected>video.uploaded</option>
+                    <option value="video.deleted">video.deleted</option>
+                </select>
+            </div>
+
+            <button type="button" id="testBtn" class="test-btn">Send Test Webhook</button>
+            <div id="testInfo" class="test-info" style="display: none;"></div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = window.location.origin;
+        const form = document.getElementById('webhookForm');
+        const message = document.getElementById('message');
+        const webhooksList = document.getElementById('webhooksList');
+        const refreshBtn = document.getElementById('refreshBtn');
+        const submitBtn = document.getElementById('submitBtn');
+        const testBtn = document.getElementById('testBtn');
+        const testInfo = document.getElementById('testInfo');
+
+        function showMessage(text, type) {
+            message.textContent = text;
+            message.className = `message ${type}`;
+            message.style.display = 'block';
+            setTimeout(() => {
+                message.style.display = 'none';
+            }, 5000);
+        }
+
+        async function loadWebhooks() {
+            webhooksList.innerHTML = '<div class="loading">Loading...</div>';
+            refreshBtn.style.display = 'none';
+
+            try {
+                const response = await fetch(`${API_BASE}/api/webhooks`);
+                const data = await response.json();
+
+                if (!data.success) {
+                    throw new Error('Failed to load webhooks');
+                }
+
+                const webhooks = data.webhooks;
+                if (Object.keys(webhooks).length === 0) {
+                    webhooksList.innerHTML = '<div class="no-webhooks">No webhooks registered</div>';
+                    return;
+                }
+
+                webhooksList.innerHTML = '';
+                for (const [event, urls] of Object.entries(webhooks)) {
+                    urls.forEach(url => {
+                        const item = document.createElement('div');
+                        item.className = 'webhook-item';
+                        item.innerHTML = `
+                            <div class="webhook-info">
+                                <div class="webhook-event">${event}</div>
+                                <div class="webhook-url">${url}</div>
+                            </div>
+                            <button class="delete-btn" onclick="deleteWebhook('${event}', '${url}')">Delete</button>
+                        `;
+                        webhooksList.appendChild(item);
+                    });
+                }
+
+                refreshBtn.style.display = 'block';
+            } catch (error) {
+                webhooksList.innerHTML = `<div class="no-webhooks">Error loading webhooks: ${error.message}</div>`;
+            }
+        }
+
+        async function deleteWebhook(event, url) {
+            if (!confirm('Are you sure you want to delete this webhook?')) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE}/api/webhooks`, {
+                    method: 'DELETE',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ event, url })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    showMessage('Webhook deleted successfully', 'success');
+                    loadWebhooks();
+                } else {
+                    showMessage('Failed to delete webhook', 'error');
+                }
+            } catch (error) {
+                showMessage(`Error: ${error.message}`, 'error');
+            }
+        }
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const event = document.getElementById('event').value;
+            const url = document.getElementById('url').value;
+
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Adding...';
+
+            try {
+                const response = await fetch(`${API_BASE}/api/webhooks`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ event, url })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    showMessage('Webhook added successfully!', 'success');
+                    document.getElementById('url').value = '';
+                    loadWebhooks();
+                } else {
+                    showMessage(data.error || 'Failed to add webhook', 'error');
+                }
+            } catch (error) {
+                showMessage(`Error: ${error.message}`, 'error');
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Add Webhook';
+            }
+        });
+
+        refreshBtn.addEventListener('click', loadWebhooks);
+
+        async function testWebhook() {
+            const url = document.getElementById('testUrl').value;
+            const event = document.getElementById('testEvent').value;
+
+            if (!url) {
+                showMessage('Please enter a webhook URL', 'error');
+                return;
+            }
+
+            testBtn.disabled = true;
+            testBtn.textContent = 'Sending...';
+
+            try {
+                const response = await fetch(`${API_BASE}/api/webhooks/test`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url, event })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    testInfo.innerHTML = `<strong>Test webhook sent!</strong><br>
+                        URL: ${data.url}<br>
+                        Event: ${data.event}<br>
+                        Video ID: ${data.video_id}<br>
+                        Timestamp: ${new Date(data.timestamp * 1000).toLocaleString()}`;
+                    testInfo.style.display = 'block';
+                    showMessage('Test webhook sent successfully!', 'success');
+                } else {
+                    showMessage(data.error || 'Failed to send test webhook', 'error');
+                }
+            } catch (error) {
+                showMessage(`Error: ${error.message}`, 'error');
+            } finally {
+                testBtn.disabled = false;
+                testBtn.textContent = 'Send Test Webhook';
+            }
+        }
+
+        testBtn.addEventListener('click', testWebhook);
+
+        // Load webhooks on page load
+        loadWebhooks();
+    </script>
+</body>
+</html>

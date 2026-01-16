@@ -1,9 +1,12 @@
 package main
 
 import (
+	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 )
 
 // addWebhookHandler adds a new webhook URL for an event
@@ -79,5 +82,68 @@ func (s *Server) removeWebhookHandler(c *gin.Context) {
 		"message": "webhook removed successfully",
 		"event":   req.Event,
 		"url":     req.URL,
+	})
+}
+
+// testWebhookHandler sends a test webhook call to a specified URL
+func (s *Server) testWebhookHandler(c *gin.Context) {
+	var req struct {
+		URL     string `json:"url" binding:"required,url"`
+		Event   string `json:"event"`
+		VideoID string `json:"videoId"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Set default event if not provided
+	if req.Event == "" {
+		req.Event = "video.uploaded"
+	}
+
+	// Generate test video ID if not provided
+	if req.VideoID == "" {
+		req.VideoID = uuid.New().String()
+	}
+
+	// Create test video payload
+	testVideo := &Video{
+		ID:          req.VideoID,
+		Name:        "test_video.mp4",
+		Size:        12345678,
+		ContentType: "video/mp4",
+		CreatedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
+		URL:         fmt.Sprintf("/api/videos/%s", req.VideoID),
+	}
+
+	// Send test webhook
+	payload := gin.H{
+		"video":     testVideo,
+		"event":     req.Event,
+		"timestamp": time.Now().Unix(),
+		"is_test":   true,
+		"test_mode": true,
+	}
+
+	s.logger.Info().
+		Str("url", req.URL).
+		Str("event", req.Event).
+		Msg("sending test webhook")
+
+	// Send webhook in a goroutine (async)
+	go func() {
+		_ = s.webhookMgr.SendDirectWebhook(req.URL, payload)
+	}()
+
+	c.JSON(http.StatusOK, gin.H{
+		"success":   true,
+		"message":   "test webhook sent successfully",
+		"url":       req.URL,
+		"event":     req.Event,
+		"video_id":  req.VideoID,
+		"timestamp": time.Now().Unix(),
 	})
 }

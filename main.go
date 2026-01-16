@@ -16,10 +16,10 @@ import (
 
 // Config holds server configuration
 type Config struct {
-	ServerPort       string
-	StoragePath      string
-	MaxFileSize      int64
-	EnableLogging    bool
+	ServerPort    string
+	StoragePath   string
+	MaxFileSize   int64
+	EnableLogging bool
 }
 
 // Video represents a video entry in our system
@@ -37,10 +37,10 @@ type Video struct {
 type InMemoryDB struct {
 	videos map[string]*Video
 	mutex  sync.RWMutex
-	
+
 	// Indexes for faster lookups
 	nameIndex map[string]string // name -> id
-	latestID  string           // most recently added video ID
+	latestID  string            // most recently added video ID
 }
 
 // NewInMemoryDB creates a new instance of the in-memory database
@@ -55,7 +55,7 @@ func NewInMemoryDB() *InMemoryDB {
 func (db *InMemoryDB) AddVideo(v *Video) {
 	db.mutex.Lock()
 	defer db.mutex.Unlock()
-	
+
 	db.videos[v.ID] = v
 	db.nameIndex[v.Name] = v.ID
 	db.latestID = v.ID
@@ -65,12 +65,12 @@ func (db *InMemoryDB) AddVideo(v *Video) {
 func (db *InMemoryDB) GetVideoByID(id string) (*Video, bool) {
 	db.mutex.RLock()
 	defer db.mutex.RUnlock()
-	
+
 	video, exists := db.videos[id]
 	if !exists {
 		return nil, false
 	}
-	
+
 	// Return a copy to prevent concurrent modification
 	videoCopy := *video
 	return &videoCopy, true
@@ -80,17 +80,17 @@ func (db *InMemoryDB) GetVideoByID(id string) (*Video, bool) {
 func (db *InMemoryDB) GetVideoByName(name string) (*Video, bool) {
 	db.mutex.RLock()
 	defer db.mutex.RUnlock()
-	
+
 	id, exists := db.nameIndex[name]
 	if !exists {
 		return nil, false
 	}
-	
+
 	video, exists := db.videos[id]
 	if !exists {
 		return nil, false
 	}
-	
+
 	// Return a copy to prevent concurrent modification
 	videoCopy := *video
 	return &videoCopy, true
@@ -100,16 +100,16 @@ func (db *InMemoryDB) GetVideoByName(name string) (*Video, bool) {
 func (db *InMemoryDB) GetLatestVideo() (*Video, bool) {
 	db.mutex.RLock()
 	defer db.mutex.RUnlock()
-	
+
 	if db.latestID == "" {
 		return nil, false
 	}
-	
+
 	video, exists := db.videos[db.latestID]
 	if !exists {
 		return nil, false
 	}
-	
+
 	// Return a copy to prevent concurrent modification
 	videoCopy := *video
 	return &videoCopy, true
@@ -119,15 +119,15 @@ func (db *InMemoryDB) GetLatestVideo() (*Video, bool) {
 func (db *InMemoryDB) DeleteVideo(id string) bool {
 	db.mutex.Lock()
 	defer db.mutex.Unlock()
-	
+
 	video, exists := db.videos[id]
 	if !exists {
 		return false
 	}
-	
+
 	delete(db.videos, id)
 	delete(db.nameIndex, video.Name)
-	
+
 	// Update latestID if this was the latest video
 	if db.latestID == id {
 		// Find the new latest video
@@ -138,7 +138,7 @@ func (db *InMemoryDB) DeleteVideo(id string) bool {
 			}
 		}
 	}
-	
+
 	return true
 }
 
@@ -146,24 +146,24 @@ func (db *InMemoryDB) DeleteVideo(id string) bool {
 func (db *InMemoryDB) GetAllVideos() []*Video {
 	db.mutex.RLock()
 	defer db.mutex.RUnlock()
-	
+
 	videos := make([]*Video, 0, len(db.videos))
 	for _, video := range db.videos {
 		// Return copies to prevent concurrent modification
 		videoCopy := *video
 		videos = append(videos, &videoCopy)
 	}
-	
+
 	return videos
 }
 
 // Server represents the main server
 type Server struct {
-	config       *Config
-	db           *InMemoryDB
-	webhookMgr   *WebhookManager
-	router       *gin.Engine
-	logger       zerolog.Logger
+	config     *Config
+	db         *InMemoryDB
+	webhookMgr *WebhookManager
+	router     *gin.Engine
+	logger     zerolog.Logger
 }
 
 // NewServer creates a new server instance
@@ -201,6 +201,9 @@ func (s *Server) setupRoutes() {
 	// Health check
 	s.router.GET("/health", s.healthHandler)
 
+	// Serve static HTML UI
+	s.router.GET("/", s.serveUIHandler)
+
 	// Video endpoints
 	videoGroup := s.router.Group("/api/videos")
 	{
@@ -217,6 +220,7 @@ func (s *Server) setupRoutes() {
 		webhookGroup.POST("", s.addWebhookHandler)
 		webhookGroup.GET("", s.getWebhooksHandler)
 		webhookGroup.DELETE("", s.removeWebhookHandler)
+		webhookGroup.POST("/test", s.testWebhookHandler)
 	}
 }
 
@@ -224,11 +228,11 @@ func (s *Server) setupRoutes() {
 func (s *Server) loggingMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		start := time.Now()
-		
+
 		c.Next()
-		
+
 		duration := time.Since(start)
-		
+
 		s.logger.Info().
 			Str("method", c.Request.Method).
 			Str("path", c.Request.URL.Path).
@@ -246,31 +250,36 @@ func (s *Server) healthHandler(c *gin.Context) {
 	})
 }
 
+// serveUIHandler serves the HTML UI for webhook management
+func (s *Server) serveUIHandler(c *gin.Context) {
+	c.File("index.html")
+}
+
 // Run starts the HTTP server
 func (s *Server) Run() error {
 	s.logger.Info().Str("port", s.config.ServerPort).Msg("starting server")
-	
+
 	srv := &http.Server{
 		Addr:    ":" + s.config.ServerPort,
 		Handler: s.router,
 	}
-	
+
 	// Graceful shutdown
 	go func() {
 		sigChan := make(chan os.Signal, 1)
 		signal.Notify(sigChan, os.Interrupt)
 		<-sigChan
-		
+
 		s.logger.Info().Msg("shutting down server...")
-		
+
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
-		
+
 		if err := srv.Shutdown(ctx); err != nil {
 			s.logger.Error().Err(err).Msg("server shutdown error")
 		}
 	}()
-	
+
 	return srv.ListenAndServe()
 }
 
