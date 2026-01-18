@@ -349,6 +349,15 @@ func (s *Server) setupRoutes() {
 	// Debug endpoint - list all videos
 	s.router.GET("/api/debug/videos", s.debugListVideosHandler)
 
+	// Webhook endpoints
+	webhookGroup := s.router.Group("/api/webhooks")
+	{
+		webhookGroup.POST("", s.addWebhookHandler)
+		webhookGroup.GET("", s.getWebhooksHandler)
+		webhookGroup.DELETE("", s.removeWebhookHandler)
+		webhookGroup.POST("/test", s.testWebhookHandler)
+	}
+
 	// Catch-all for debugging - shows what paths aren't matching
 	s.router.NoRoute(func(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{
