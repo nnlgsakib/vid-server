@@ -249,25 +249,26 @@ func parseNumber(s string) (int64, error) {
 
 // directDownloadHandler serves video files as direct downloads with .mp4 extension
 func (s *Server) directDownloadHandler(c *gin.Context) {
-	// Get video ID from URL parameter (may include .mp4 suffix)
-	videoID := c.Param("id")
+	// Get video ID from wildcard path
+	pathID := c.Param("id")
 
-	// Strip .mp4 extension if present
-	videoID = strings.TrimSuffix(videoID, ".mp4")
+	// Remove leading slash and .mp4 extension
+	pathID = strings.TrimPrefix(pathID, "/")
+	pathID = strings.TrimSuffix(pathID, ".mp4")
 
-	s.logger.Info().Str("video_id", videoID).Msg("direct download requested")
+	s.logger.Info().Str("raw_path", c.Param("id")).Str("video_id", pathID).Msg("direct download requested")
 
 	// Look up video in database by ID
-	video, exists := s.db.GetVideoByID(videoID)
+	video, exists := s.db.GetVideoByID(pathID)
 
 	// If not found in database, try to find by file prefix
 	if !exists {
-		s.logger.Warn().Str("video_id", videoID).Msg("video not found in database, searching storage...")
-		video, exists = s.db.FindVideoByFilePrefix(s.config.StoragePath, videoID)
+		s.logger.Warn().Str("video_id", pathID).Msg("video not found in database, searching storage...")
+		video, exists = s.db.FindVideoByFilePrefix(s.config.StoragePath, pathID)
 	}
 
 	if !exists {
-		s.logger.Error().Str("video_id", videoID).Msg("video not found anywhere")
+		s.logger.Error().Str("video_id", pathID).Msg("video not found anywhere")
 		c.JSON(http.StatusNotFound, gin.H{"error": "video not found"})
 		return
 	}
@@ -275,8 +276,7 @@ func (s *Server) directDownloadHandler(c *gin.Context) {
 	s.logger.Info().Str("video_name", video.Name).Msg("video found")
 
 	// Construct file path
-	filePath := filepath.Join(s.config.StoragePath, videoID+"_"+video.Name)
-	s.logger.Info().Str("filepath", filePath).Msg("checking file on disk")
+	filePath := filepath.Join(s.config.StoragePath, pathID+"_"+video.Name)
 
 	// Check if file exists on disk
 	if _, err := os.Stat(filePath); os.IsNotExist(err) {
@@ -296,7 +296,7 @@ func (s *Server) directDownloadHandler(c *gin.Context) {
 	// Set headers for direct download
 	c.Header("Content-Type", "video/mp4")
 	c.Header("Content-Length", fmt.Sprintf("%d", stat.Size()))
-	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s.mp4\"", videoID))
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s.mp4\"", pathID))
 	c.Header("Accept-Ranges", "bytes")
 
 	// Serve the file
