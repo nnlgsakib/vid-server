@@ -257,16 +257,26 @@ func (s *Server) directDownloadHandler(c *gin.Context) {
 
 	s.logger.Info().Str("video_id", videoID).Msg("direct download requested")
 
-	// Look up video in database
+	// Look up video in database by ID
 	video, exists := s.db.GetVideoByID(videoID)
+
+	// If not found in database, try to find by file prefix
 	if !exists {
-		s.logger.Error().Str("video_id", videoID).Msg("video not found")
+		s.logger.Warn().Str("video_id", videoID).Msg("video not found in database, searching storage...")
+		video, exists = s.db.FindVideoByFilePrefix(s.config.StoragePath, videoID)
+	}
+
+	if !exists {
+		s.logger.Error().Str("video_id", videoID).Msg("video not found anywhere")
 		c.JSON(http.StatusNotFound, gin.H{"error": "video not found"})
 		return
 	}
 
+	s.logger.Info().Str("video_name", video.Name).Msg("video found")
+
 	// Construct file path
 	filePath := filepath.Join(s.config.StoragePath, videoID+"_"+video.Name)
+	s.logger.Info().Str("filepath", filePath).Msg("checking file on disk")
 
 	// Check if file exists on disk
 	if _, err := os.Stat(filePath); os.IsNotExist(err) {

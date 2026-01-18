@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"sync"
 	"time"
 
@@ -208,6 +209,38 @@ func (db *InMemoryDB) GetLatestVideo() (*Video, bool) {
 	return &videoCopy, true
 }
 
+// FindVideoByFilePrefix finds a video by checking if a file exists with the given prefix
+func (db *InMemoryDB) FindVideoByFilePrefix(storagePath, filePrefix string) (*Video, bool) {
+	db.mutex.RLock()
+	defer db.mutex.RUnlock()
+
+	// First check if video exists in database by ID
+	if video, exists := db.videos[filePrefix]; exists {
+		return video, true
+	}
+
+	// If not found in database, scan storage directory for matching files
+	files, err := os.ReadDir(storagePath)
+	if err != nil {
+		return nil, false
+	}
+
+	for _, file := range files {
+		if !file.IsDir() && strings.HasPrefix(file.Name(), filePrefix+"_") {
+			// Found a matching file, try to find video by name
+			filename := strings.TrimPrefix(file.Name(), filePrefix+"_")
+			if video, exists := db.nameIndex[filename]; exists {
+				if v, ok := db.videos[video]; ok {
+					videoCopy := *v
+					return &videoCopy, true
+				}
+			}
+		}
+	}
+
+	return nil, false
+}
+
 // DeleteVideo removes a video from the database
 func (db *InMemoryDB) DeleteVideo(id string) bool {
 	db.mutex.Lock()
@@ -309,6 +342,9 @@ func (s *Server) setupRoutes() {
 		videoGroup.GET("/latest", s.getLatestVideoHandler)
 		videoGroup.GET("", s.getAllVideosHandler)
 	}
+
+	// Debug endpoint - list all videos
+	s.router.GET("/api/debug/videos", s.debugListVideosHandler)
 
 	// Direct download endpoint (for direct .mp4 download)
 	s.router.GET("/download/:id.mp4", s.directDownloadHandler)

@@ -40,13 +40,13 @@ func (s *Server) getAllVideosHandler(c *gin.Context) {
 	}
 
 	allVideos := s.db.GetAllVideos()
-	
+
 	// Calculate pagination
 	start := (page - 1) * limit
 	if start >= len(allVideos) {
 		start = len(allVideos)
 	}
-	
+
 	end := start + limit
 	if end > len(allVideos) {
 		end = len(allVideos)
@@ -66,7 +66,7 @@ func (s *Server) getAllVideosHandler(c *gin.Context) {
 // deleteVideoHandler deletes a video by ID
 func (s *Server) deleteVideoHandler(c *gin.Context) {
 	videoID := c.Param("id")
-	
+
 	video, exists := s.db.GetVideoByID(videoID)
 	if !exists {
 		c.JSON(http.StatusNotFound, gin.H{"error": "video not found"})
@@ -109,4 +109,16 @@ func (s *Server) deleteVideoHandler(c *gin.Context) {
 // getFilePath constructs the file path for a video
 func (s *Server) getFilePath(videoID, filename string) string {
 	return filepath.Join(s.config.StoragePath, videoID+"_"+filename)
+}
+
+// debugListVideosHandler returns all videos in database (for debugging)
+func (s *Server) debugListVideosHandler(c *gin.Context) {
+	allVideos := s.db.GetAllVideos()
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"count":   len(allVideos),
+		"storage": s.config.StoragePath,
+		"videos":  allVideos,
+	})
 }
