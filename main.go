@@ -275,7 +275,7 @@ func NewServer(config *Config) *Server {
 	server := &Server{
 		config:     config,
 		db:         NewInMemoryDB(config.StoragePath + "/database.json"),
-		webhookMgr: NewWebhookManager(),
+		webhookMgr: NewWebhookManager(config.StoragePath + "/webhooks.json"),
 		logger:     logger.With().Str("component", "server").Logger(),
 	}
 

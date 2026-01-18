@@ -4,22 +4,76 @@ import (
 	"bytes"
 	"encoding/json"
 	"net/http"
+	"os"
 	"sync"
 
 	"github.com/rs/zerolog/log"
 )
 
-// WebhookManager manages webhook subscriptions and notifications
+// WebhookManager manages webhook subscriptions and notifications with persistence
 type WebhookManager struct {
 	webhooks map[string][]string // event -> urls mapping
 	mutex    sync.RWMutex
+	dbPath   string // path to JSON database file
 }
 
 // NewWebhookManager creates a new webhook manager
-func NewWebhookManager() *WebhookManager {
-	return &WebhookManager{
+func NewWebhookManager(dbPath string) *WebhookManager {
+	wm := &WebhookManager{
 		webhooks: make(map[string][]string),
+		dbPath:   dbPath,
 	}
+
+	// Load existing webhooks from disk
+	wm.loadFromDisk()
+
+	return wm
+}
+
+// saveToDisk saves the webhooks to a JSON file
+func (wm *WebhookManager) saveToDisk() {
+	wm.mutex.RLock()
+	defer wm.mutex.RUnlock()
+
+	data, err := json.MarshalIndent(wm.webhooks, "", "  ")
+	if err != nil {
+		log.Error().Err(err).Msg("failed to serialize webhooks")
+		return
+	}
+
+	if err := os.WriteFile(wm.dbPath, data, 0644); err != nil {
+		log.Error().Err(err).Msg("failed to save webhooks")
+	}
+}
+
+// loadFromDisk loads the webhooks from a JSON file
+func (wm *WebhookManager) loadFromDisk() {
+	wm.mutex.Lock()
+	defer wm.mutex.Unlock()
+
+	// Check if file exists
+	if _, err := os.Stat(wm.dbPath); os.IsNotExist(err) {
+		return
+	}
+
+	// Read file
+	data, err := os.ReadFile(wm.dbPath)
+	if err != nil {
+		log.Error().Err(err).Msg("failed to read webhooks")
+		return
+	}
+
+	if len(data) == 0 {
+		return
+	}
+
+	// Parse JSON
+	if err := json.Unmarshal(data, &wm.webhooks); err != nil {
+		log.Error().Err(err).Msg("failed to parse webhooks")
+		return
+	}
+
+	log.Info().Msgf("Loaded %d webhook events from disk", len(wm.webhooks))
 }
 
 // AddWebhook adds a webhook URL for a specific event
@@ -35,6 +89,9 @@ func (wm *WebhookManager) AddWebhook(event, url string) {
 	}
 
 	wm.webhooks[event] = append(wm.webhooks[event], url)
+
+	// Save to disk
+	go wm.saveToDisk()
 }
 
 // RemoveWebhook removes a webhook URL for a specific event
@@ -52,6 +109,9 @@ func (wm *WebhookManager) RemoveWebhook(event, url string) {
 	}
 
 	wm.webhooks[event] = newUrls
+
+	// Save to disk
+	go wm.saveToDisk()
 }
 
 // NotifyWebhooks sends notification to all registered webhooks for an event
