@@ -333,6 +333,9 @@ func (s *Server) setupRoutes() {
 	// Serve static HTML UI
 	s.router.GET("/", s.serveUIHandler)
 
+	// Direct download endpoint (for direct .mp4 download) - MUST be before other routes
+	s.router.GET("/download/*id", s.directDownloadHandler)
+
 	// Video endpoints
 	videoGroup := s.router.Group("/api/videos")
 	{
@@ -346,17 +349,15 @@ func (s *Server) setupRoutes() {
 	// Debug endpoint - list all videos
 	s.router.GET("/api/debug/videos", s.debugListVideosHandler)
 
-	// Direct download endpoint (for direct .mp4 download)
-	s.router.GET("/download/*id", s.directDownloadHandler)
-
-	// Webhook endpoints
-	webhookGroup := s.router.Group("/api/webhooks")
-	{
-		webhookGroup.POST("", s.addWebhookHandler)
-		webhookGroup.GET("", s.getWebhooksHandler)
-		webhookGroup.DELETE("", s.removeWebhookHandler)
-		webhookGroup.POST("/test", s.testWebhookHandler)
-	}
+	// Catch-all for debugging - shows what paths aren't matching
+	s.router.NoRoute(func(c *gin.Context) {
+		c.JSON(http.StatusNotFound, gin.H{
+			"error":    "route not found",
+			"path":     c.Request.URL.Path,
+			"method":   c.Request.Method,
+			"received": true,
+		})
+	})
 }
 
 // loggingMiddleware logs incoming requests
