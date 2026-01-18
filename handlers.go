@@ -251,13 +251,7 @@ func parseNumber(s string) (int64, error) {
 func (s *Server) directDownloadHandler(c *gin.Context) {
 	// Get video ID from URL parameter
 	videoID := c.Param("id")
-
-	// Validate video ID format (UUID)
-	if _, err := uuid.Parse(videoID); err != nil {
-		s.logger.Error().Str("video_id", videoID).Msg("invalid video ID format")
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid video ID format"})
-		return
-	}
+	s.logger.Info().Str("video_id", videoID).Msg("direct download requested")
 
 	// Look up video in database
 	video, exists := s.db.GetVideoByID(videoID)

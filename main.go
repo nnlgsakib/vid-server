@@ -215,7 +215,7 @@ func (s *Server) setupRoutes() {
 	}
 
 	// Direct download endpoint (for direct .mp4 download)
-	s.router.GET("/:id.mp4", s.directDownloadHandler)
+	s.router.GET("/download/:id", s.directDownloadHandler)
 
 	// Webhook endpoints
 	webhookGroup := s.router.Group("/api/webhooks")
