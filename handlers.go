@@ -249,8 +249,12 @@ func parseNumber(s string) (int64, error) {
 
 // directDownloadHandler serves video files as direct downloads with .mp4 extension
 func (s *Server) directDownloadHandler(c *gin.Context) {
-	// Get video ID from URL parameter
+	// Get video ID from URL parameter (may include .mp4 suffix)
 	videoID := c.Param("id")
+
+	// Strip .mp4 extension if present
+	videoID = strings.TrimSuffix(videoID, ".mp4")
+
 	s.logger.Info().Str("video_id", videoID).Msg("direct download requested")
 
 	// Look up video in database

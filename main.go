@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -33,7 +34,7 @@ type Video struct {
 	URL         string    `json:"url"`
 }
 
-// InMemoryDB represents our optimized in-memory database
+// InMemoryDB represents our optimized in-memory database with persistence
 type InMemoryDB struct {
 	videos map[string]*Video
 	mutex  sync.RWMutex
@@ -41,14 +42,103 @@ type InMemoryDB struct {
 	// Indexes for faster lookups
 	nameIndex map[string]string // name -> id
 	latestID  string            // most recently added video ID
+	dbPath    string            // path to JSON database file
 }
 
 // NewInMemoryDB creates a new instance of the in-memory database
-func NewInMemoryDB() *InMemoryDB {
-	return &InMemoryDB{
+func NewInMemoryDB(dbPath string) *InMemoryDB {
+	db := &InMemoryDB{
 		videos:    make(map[string]*Video),
 		nameIndex: make(map[string]string),
+		dbPath:    dbPath,
 	}
+
+	// Load existing data from disk
+	db.loadFromDisk()
+
+	return db
+}
+
+// saveToDisk saves the database to a JSON file
+func (db *InMemoryDB) saveToDisk() {
+	db.mutex.RLock()
+	defer db.mutex.RUnlock()
+
+	// Create a serializable structure
+	type dbRecord struct {
+		Videos    []*Video
+		NameIndex map[string]string
+		LatestID  string
+	}
+
+	record := dbRecord{
+		Videos:    make([]*Video, 0, len(db.videos)),
+		NameIndex: db.nameIndex,
+		LatestID:  db.latestID,
+	}
+
+	for _, video := range db.videos {
+		record.Videos = append(record.Videos, video)
+	}
+
+	// Write to file
+	data, err := json.MarshalIndent(record, "", "  ")
+	if err != nil {
+		log.Printf("Failed to serialize database: %v", err)
+		return
+	}
+
+	if err := os.WriteFile(db.dbPath, data, 0644); err != nil {
+		log.Printf("Failed to save database: %v", err)
+	}
+}
+
+// loadFromDisk loads the database from a JSON file
+func (db *InMemoryDB) loadFromDisk() {
+	db.mutex.Lock()
+	defer db.mutex.Unlock()
+
+	// Check if file exists
+	if _, err := os.Stat(db.dbPath); os.IsNotExist(err) {
+		return
+	}
+
+	// Read file
+	data, err := os.ReadFile(db.dbPath)
+	if err != nil {
+		log.Printf("Failed to read database: %v", err)
+		return
+	}
+
+	if len(data) == 0 {
+		return
+	}
+
+	// Parse JSON
+	type dbRecord struct {
+		Videos    []*Video
+		NameIndex map[string]string
+		LatestID  string
+	}
+
+	var record dbRecord
+	if err := json.Unmarshal(data, &record); err != nil {
+		log.Printf("Failed to parse database: %v", err)
+		return
+	}
+
+	// Restore data
+	db.videos = make(map[string]*Video)
+	db.nameIndex = make(map[string]string)
+
+	for _, video := range record.Videos {
+		db.videos[video.ID] = video
+		db.nameIndex[video.Name] = video.ID
+	}
+
+	db.latestID = record.LatestID
+
+	log.Printf("Loaded %d videos from database", len(db.videos))
 }
 
 // AddVideo adds a video to the database
@@ -59,6 +149,9 @@ func (db *InMemoryDB) AddVideo(v *Video) {
 	db.videos[v.ID] = v
 	db.nameIndex[v.Name] = v.ID
 	db.latestID = v.ID
+
+	// Save to disk
+	go db.saveToDisk()
 }
 
 // GetVideoByID retrieves a video by its ID
@@ -139,6 +232,9 @@ func (db *InMemoryDB) DeleteVideo(id string) bool {
 		}
 	}
 
+	// Save to disk
+	go db.saveToDisk()
+
 	return true
 }
 
@@ -178,7 +274,7 @@ func NewServer(config *Config) *Server {
 
 	server := &Server{
 		config:     config,
-		db:         NewInMemoryDB(),
+		db:         NewInMemoryDB(config.StoragePath + "/database.json"),
 		webhookMgr: NewWebhookManager(),
 		logger:     logger.With().Str("component", "server").Logger(),
 	}
@@ -215,7 +311,7 @@ func (s *Server) setupRoutes() {
 	}
 
 	// Direct download endpoint (for direct .mp4 download)
-	s.router.GET("/download/:id", s.directDownloadHandler)
+	s.router.GET("/download/:id.mp4", s.directDownloadHandler)
 
 	// Webhook endpoints
 	webhookGroup := s.router.Group("/api/webhooks")
