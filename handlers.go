@@ -31,7 +31,7 @@ func (s *Server) uploadVideoHandler(c *gin.Context) {
 	}
 
 	file := files[0]
-	
+
 	// Validate file size
 	if file.Size > s.config.MaxFileSize {
 		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("file too large, max size is %d bytes", s.config.MaxFileSize)})
@@ -41,7 +41,7 @@ func (s *Server) uploadVideoHandler(c *gin.Context) {
 	// Generate unique ID and filename
 	videoID := uuid.New().String()
 	filename := sanitizeFilename(file.Filename)
-	
+
 	// Determine content type
 	contentType := file.Header.Get("Content-Type")
 	if contentType == "" {
@@ -50,7 +50,7 @@ func (s *Server) uploadVideoHandler(c *gin.Context) {
 
 	// Create file path
 	filePath := filepath.Join(s.config.StoragePath, videoID+"_"+filename)
-	
+
 	// Save file to disk
 	if err := c.SaveUploadedFile(file, filePath); err != nil {
 		s.logger.Error().Err(err).Str("filepath", filePath).Msg("failed to save uploaded file")
@@ -88,8 +88,8 @@ func (s *Server) uploadVideoHandler(c *gin.Context) {
 
 	// Trigger webhook for video upload event
 	go s.webhookMgr.NotifyWebhooks("video.uploaded", gin.H{
-		"video":   video,
-		"event":   "video.uploaded",
+		"video":     video,
+		"event":     "video.uploaded",
 		"timestamp": time.Now().Unix(),
 	})
 
@@ -102,7 +102,7 @@ func (s *Server) uploadVideoHandler(c *gin.Context) {
 // downloadVideoHandler serves video files with range support
 func (s *Server) downloadVideoHandler(c *gin.Context) {
 	videoID := c.Param("id")
-	
+
 	video, exists := s.db.GetVideoByID(videoID)
 	if !exists {
 		c.JSON(http.StatusNotFound, gin.H{"error": "video not found"})
@@ -110,7 +110,7 @@ func (s *Server) downloadVideoHandler(c *gin.Context) {
 	}
 
 	filePath := filepath.Join(s.config.StoragePath, videoID+"_"+video.Name)
-	
+
 	// Check if file exists
 	if _, err := os.Stat(filePath); os.IsNotExist(err) {
 		s.logger.Error().Str("filepath", filePath).Msg("video file not found on disk")
@@ -129,7 +129,7 @@ func (s *Server) downloadVideoHandler(c *gin.Context) {
 	c.Header("Content-Type", video.ContentType)
 	c.Header("Content-Length", fmt.Sprintf("%d", video.Size))
 	c.Header("Accept-Ranges", "bytes")
-	
+
 	http.ServeFile(c.Writer, c.Request, filePath)
 }
 
@@ -247,18 +247,67 @@ func parseNumber(s string) (int64, error) {
 	return n, err
 }
 
+// directDownloadHandler serves video files as direct downloads with .mp4 extension
+func (s *Server) directDownloadHandler(c *gin.Context) {
+	// Get video ID from URL parameter
+	videoID := c.Param("id")
+
+	// Validate video ID format (UUID)
+	if _, err := uuid.Parse(videoID); err != nil {
+		s.logger.Error().Str("video_id", videoID).Msg("invalid video ID format")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid video ID format"})
+		return
+	}
+
+	// Look up video in database
+	video, exists := s.db.GetVideoByID(videoID)
+	if !exists {
+		s.logger.Error().Str("video_id", videoID).Msg("video not found")
+		c.JSON(http.StatusNotFound, gin.H{"error": "video not found"})
+		return
+	}
+
+	// Construct file path
+	filePath := filepath.Join(s.config.StoragePath, videoID+"_"+video.Name)
+
+	// Check if file exists on disk
+	if _, err := os.Stat(filePath); os.IsNotExist(err) {
+		s.logger.Error().Str("filepath", filePath).Msg("video file not found on disk")
+		c.JSON(http.StatusNotFound, gin.H{"error": "video file not found"})
+		return
+	}
+
+	// Get file info for Content-Length
+	stat, err := os.Stat(filePath)
+	if err != nil {
+		s.logger.Error().Err(err).Str("filepath", filePath).Msg("failed to get file stats")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get file info"})
+		return
+	}
+
+	// Set headers for direct download
+	c.Header("Content-Type", "video/mp4")
+	c.Header("Content-Length", fmt.Sprintf("%d", stat.Size()))
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s.mp4\"", videoID))
+	c.Header("Accept-Ranges", "bytes")
+
+	// Serve the file
+	c.Status(http.StatusOK)
+	http.ServeFile(c.Writer, c.Request, filePath)
+}
+
 // sanitizeFilename sanitizes a filename to prevent path traversal
 func sanitizeFilename(filename string) string {
 	// Remove any path separators to prevent directory traversal
 	filename = strings.ReplaceAll(filename, "/", "_")
 	filename = strings.ReplaceAll(filename, "\\", "_")
-	
+
 	// Limit length to prevent abuse
 	if len(filename) > 255 {
 		ext := filepath.Ext(filename)
 		base := filename[:255-len(ext)]
 		filename = base + ext
 	}
-	
+
 	return filename
 }

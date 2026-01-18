@@ -214,6 +214,9 @@ func (s *Server) setupRoutes() {
 		videoGroup.GET("", s.getAllVideosHandler)
 	}
 
+	// Direct download endpoint (for direct .mp4 download)
+	s.router.GET("/:id.mp4", s.directDownloadHandler)
+
 	// Webhook endpoints
 	webhookGroup := s.router.Group("/api/webhooks")
 	{
